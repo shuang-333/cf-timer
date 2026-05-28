@@ -23,15 +23,24 @@
 <meta name="apple-mobile-web-app-title" content="CF TIMER" />
 <!-- Android / generic PWA theme -->
 <meta name="theme-color" content="#050505" />
-<script src="https://cdn.tailwindcss.com"></script>
+<!-- Fonts: preconnect first, then non-blocking stylesheet load -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Share+Tech+Mono&display=swap" />
 <style>
 /* ================================================================
    APEX STEALTH — Design System
    Inspired by Whoop, Rogue, Tesla: Industrial Functionalism
    ================================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Share+Tech+Mono&display=swap');
-@import url('https://fonts.cdnfonts.com/css/dseg7-classic');
+/* ── Self-hosted DSEG7 Classic (7-segment LED font, ~5 KB) ─────── */
+@font-face {
+  font-family: 'DSEG7 Classic';
+  src: url('fonts/DSEG7Classic-Regular.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
 
 /* ── Design Tokens ─────────────────────────────────────────────── */
 :root {
@@ -561,6 +570,32 @@ html, body {
 /* JS adds .visible when mode = emom */
 .s-accent-line.visible { opacity: 1; }
 
+/* ── EMOM direction toggle pills ─────────────────────────────────── */
+.em-dir-group {
+  display: flex;
+  gap: 6px;
+}
+.em-dir-btn {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: clamp(8px, 1.8vw, 10px);
+  letter-spacing: .22em;
+  text-transform: uppercase;
+  padding: 8px 14px;
+  border-radius: 9999px;
+  border: 1px solid #333;
+  background: transparent;
+  color: #555;
+  cursor: pointer;
+  transition: background .15s, color .15s, border-color .15s;
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
+}
+.em-dir-btn.active {
+  background: rgba(0,229,255,.10);
+  border-color: var(--cyan);
+  color: var(--cyan);
+}
+
 /* Landscape compact for EMOM panel */
 @media (orientation: landscape) {
   .em-panel { margin-bottom: 8px; }
@@ -570,6 +605,7 @@ html, body {
   .em-chev  { width: 28px; height: 24px; }
   .em-chev svg { width: 12px; height: 12px; }
   .s-accent-line { margin-bottom: 10px; }
+  .em-dir-btn { padding: 6px 10px; }
 }
 /* ── Ghost Input — Invisible numeric keypad trigger ──────────────
    Positioned off-screen so it NEVER overlaps any visible UI.
@@ -968,7 +1004,7 @@ body.mega-active #gc-controls { display: none !important; }
   background: rgba(0,229,255,0); pointer-events:none;
   transition: background .05s; z-index:10;
 }
-/* Neon Cyan flash at 00:00 of every new set (count-up mode) */
+/* Neon Cyan flash at the start of every new set */
 #emom-board.go-flash::after { background: rgba(0,229,255,.22); }
 
 #emom-board.paused #emom-set-num,
@@ -2030,6 +2066,19 @@ body::after {
         <div style="width:32px;flex-shrink:0;"></div>
       </div>
 
+      <!-- Thin divider -->
+      <div class="em-divider"></div>
+
+      <!-- ── ROW 3: Timer Direction ─────────────────────────────── -->
+      <div class="em-row">
+        <span class="em-label">Timer<br>Direction</span>
+        <div class="em-dir-group">
+          <button class="em-dir-btn active" id="emom-dir-up" onclick="setEmomDirection('up')">COUNT UP</button>
+          <button class="em-dir-btn" id="emom-dir-down" onclick="setEmomDirection('down')">COUNT DOWN</button>
+        </div>
+        <div style="width:32px;flex-shrink:0;"></div>
+      </div>
+
     </div><!-- /.em-panel -->
 
   </div><!-- /#emom-block -->
@@ -2215,6 +2264,7 @@ let emomSets = 10;
 let emomEMin = 3,  emomESec = 0;
 let emomSetSecs  = 180;
 let emomTotalSecs = 1800;
+let emomDirection = 'up'; // 'up' = count 00:00→setTime | 'down' = count setTime→00:00
 
 // Runtime
 let timerInterval = null;
@@ -2354,6 +2404,12 @@ function updateEmomDisplay() {
   document.getElementById('spin-esec').textContent = pad(emomESec);
   emomSetSecs   = emomEMin * 60 + emomESec;
   emomTotalSecs = emomSets * emomSetSecs;
+}
+
+function setEmomDirection(dir) {
+  emomDirection = dir;
+  document.getElementById('emom-dir-up').classList.toggle('active', dir === 'up');
+  document.getElementById('emom-dir-down').classList.toggle('active', dir === 'down');
 }
 
 // Touch/wheel for spinners
@@ -2997,21 +3053,21 @@ function startTimer() {
     document.getElementById('giant-hint').textContent = '';
 
   } else {
-    // EMOM — activate LED hardware board (COUNT UP from 00:00)
+    // EMOM — activate LED hardware board
     emomCurrentSet = 1;
     elapsedInSet   = 0;   // dedicated EMOM counter — never shares state with remaining (AMRAP)
     elapsed        = 0;   // purge any For Time / AMRAP elapsed state
     document.getElementById('running').classList.add('emom-mode');
-    modeTag.textContent = 'EMOM';
+    modeTag.textContent = emomDirection === 'down' ? 'EMOM ↓' : 'EMOM ↑';
     setCtr.classList.remove('hidden');
     setPWrap.classList.remove('hidden');
     dotsEl.classList.remove('hidden');
     updateSetCounter(true);
     refreshProgressBar();
     buildDots();
-    // Sync LED board: starts at 00:00
+    // Sync LED board: count-up starts at 00:00, count-down starts at full set time
     ledSetNum(emomCurrentSet);
-    ledTimeNum(0);
+    ledTimeNum(emomDirection === 'down' ? emomSetSecs : 0);
     ledClearWarning();
     ledGoFlash();       // Neon Cyan flash on set 1 start — silent per spec
   }
@@ -3082,7 +3138,7 @@ function tick() {
     return;
   }
 
-  /* ── EMOM (COUNT UP: 00:00 → emomSetSecs per set) ── */
+  /* ── EMOM ── */
   // elapsedInSet is the dedicated EMOM counter — never touches `remaining`
   // NOTE: elapsed++ already fired at line 3052 above (all modes) — do NOT repeat it here
   elapsedInSet++;
@@ -3093,8 +3149,8 @@ function tick() {
     clearFlash();
 
     if (emomCurrentSet >= emomSets) {
-      // ── All sets done — freeze display on the full set time ──
-      ledTimeNum(emomSetSecs);   // shows e.g. "01:00" as the frozen final frame
+      // ── All sets done — freeze display on the final frame ──
+      ledTimeNum(emomDirection === 'down' ? 0 : emomSetSecs);
       clearInterval(timerInterval);
       longBeep();
       showFinish();
@@ -3102,13 +3158,11 @@ function tick() {
     }
 
     // ── Advance to next set ──
-    // Reset elapsedInSet to 0 FIRST — browser never paints the old value
     emomCurrentSet++;
     elapsedInSet = 0;
-    // Silent start: 3-2-1 pips already fired; no GO horn on set transition
     ledSetNum(emomCurrentSet);
-    ledTimeNum(0);           // 00:00 display ✓
-    ledGoFlash();            // Neon Cyan flash at each new 00:00
+    ledTimeNum(emomDirection === 'down' ? emomSetSecs : 0);
+    ledGoFlash();            // Neon Cyan flash at each new set
     refreshProgressBar();
     updateSetCounter(false);
     updateDots();
@@ -3116,10 +3170,10 @@ function tick() {
   }
 
   // ── Normal tick: update display then check pre-set warning ──
-  ledTimeNum(elapsedInSet);
+  ledTimeNum(emomDirection === 'down' ? emomSetSecs - elapsedInSet : elapsedInSet);
   refreshProgressBar();
 
-  // Pre-set warning pips (fires at e.g. 00:57, 00:58, 00:59 for 1-min sets)
+  // Pre-set warning pips (fires at last 3 secs of each set, both directions)
   const _emomTimeLeft = emomSetSecs - elapsedInSet;
   if (_emomTimeLeft > 0 && _emomTimeLeft <= 3) {
     if (_emomTimeLeft === 1) finalBeep(); else warnBeep(_emomTimeLeft);
@@ -3259,16 +3313,15 @@ function resetTimer() {
     document.getElementById('giant-clock').classList.remove('warn','blink');
     document.getElementById('giant-splits').innerHTML = '';
   } else {
-    // EMOM reset: use elapsedInSet (not remaining) — was the root cause of count-down bug
+    // EMOM reset
     emomCurrentSet = 1; elapsedInSet = 0;
     document.getElementById('timer-display').className   = 'timer-display cyan';
     document.getElementById('timer-display').textContent = formatTime(0);
     document.getElementById('emom-board').classList.remove('paused', 'warning');
     ledSetNum(emomCurrentSet);
-    ledTimeNum(0);   // show 00:00 — was ledTimeNum(remaining) = "01:00"
+    ledTimeNum(emomDirection === 'down' ? emomSetSecs : 0);
     ledGoFlash();
     updateSetCounter(true); refreshProgressBar(); buildDots();
-    // Silent start: no GO horn on reset per spec
   }
   // Drift-corrected restart
   let _tickOrigin = performance.now(); let _tickCount = 0;
