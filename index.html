@@ -3944,6 +3944,46 @@ function gcResetFrozen() {
   gc.addEventListener('mouseleave', () => gcCancelLongPress());
 })();
 
+// ══════════════════════════════════════════════
+//  SWIPE-RIGHT → HOME  (all running modes)
+// ══════════════════════════════════════════════
+(function setupSwipeHome() {
+  const running = document.getElementById('running');
+  if (!running) return;
+  const MIN_DX = 80;   // px — minimum rightward travel
+  const MAX_DY = 70;   // px — maximum vertical drift allowed
+  const MAX_MS = 500;  // ms — must complete within this window
+  let sx = 0, sy = 0, st = 0, active = false;
+
+  running.addEventListener('touchstart', e => {
+    if (e.touches.length !== 1) { active = false; return; }
+    sx = e.touches[0].clientX;
+    sy = e.touches[0].clientY;
+    st = Date.now();
+    // Only arm if swipe begins in the left 40% of the screen
+    active = sx < window.innerWidth * 0.4;
+  }, { passive: true });
+
+  running.addEventListener('touchmove', e => {
+    if (!active || e.touches.length !== 1) return;
+    // Cancel if mostly vertical
+    const dx = e.touches[0].clientX - sx;
+    const dy = Math.abs(e.touches[0].clientY - sy);
+    if (dy > MAX_DY) active = false;
+    // Cancel if swiping LEFT
+    if (dx < -20) active = false;
+  }, { passive: true });
+
+  running.addEventListener('touchend', e => {
+    if (!active) return;
+    const dx = e.changedTouches[0].clientX - sx;
+    const dy = Math.abs(e.changedTouches[0].clientY - sy);
+    const dt = Date.now() - st;
+    active = false;
+    if (dx >= MIN_DX && dy < MAX_DY && dt < MAX_MS) goHome();
+  }, { passive: true });
+})();
+
 // ── INIT ──
 updateStdDisplay();
 updateEmomDisplay();
